@@ -11,6 +11,8 @@ import {
   Setting,
   TFile,
 } from 'obsidian';
+import { RangeSetBuilder } from '@codemirror/state';
+import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate, WidgetType } from '@codemirror/view';
 
 interface ImmichUploaderSettings {
   immichUrl: string;
@@ -51,11 +53,13 @@ export default class ImmichUploaderPlugin extends Plugin {
   private observer: MutationObserver | null = null;
   private pendingRender = false;
   private blobUrls = new Set<string>();
+  private thumbnailBlobUrlCache = new Map<string, Promise<string>>();
 
   async onload() {
     await this.loadSettings();
     this.addSettingTab(new ImmichUploaderSettingTab(this.app, this));
     this.registerMarkdownPostProcessor((element) => this.renderImmichImages(element));
+    this.registerEditorExtension(createImmichLivePreviewExtension(this));
     this.startImmichImageObserver();
     this.register(() => this.revokeImmichBlobUrls());
     this.registerDomEvent(document, 'paste', (event: ClipboardEvent) => this.handlePaste(event), true);
@@ -403,12 +407,10 @@ export default class ImmichUploaderPlugin extends Plugin {
       image.setAttribute('alt', image.getAttribute('alt') || `Immich asset ${assetId}`);
       image.addClass('immich-uploader-image');
       try {
-        const blobUrl = await this.fetchImmichThumbnailBlobUrl(assetId);
+        const blobUrl = await this.getImmichThumbnailBlobUrl(assetId);
         if (!image.isConnected) {
-          URL.revokeObjectURL(blobUrl);
           continue;
         }
-        this.blobUrls.add(blobUrl);
         image.setAttribute('src', blobUrl);
       } catch (error) {
         console.error(error);
@@ -424,32 +426,65 @@ export default class ImmichUploaderPlugin extends Plugin {
       URL.revokeObjectURL(blobUrl);
     }
     this.blobUrls.clear();
+    this.thumbnailBlobUrlCache.clear();
+  }
+
+  async loadImmichThumbnailIntoImage(image: HTMLImageElement, assetId: string) {
+    image.setAttribute('data-immich-asset-id', assetId);
+    image.setAttribute('alt', image.getAttribute('alt') || `Immich asset ${assetId}`);
+    image.addClass('immich-uploader-image');
+    try {
+      const blobUrl = await this.getImmichThumbnailBlobUrl(assetId);
+      if (!image.isConnected) return;
+      image.setAttribute('src', blobUrl);
+    } catch (error) {
+      console.error(error);
+      if (image.isConnected) {
+        image.replaceWith(createEl('span', { text: `Immich image failed to load: ${assetId}` }));
+      }
+    }
+  }
+
+  scheduleImmichRender(delay = 100) {
+    if (this.pendingRender) return;
+    this.pendingRender = true;
+    window.setTimeout(async () => {
+      this.pendingRender = false;
+      await this.renderImmichImages(document.body);
+    }, delay);
   }
 
   startImmichImageObserver() {
     this.observer?.disconnect();
-    const schedule = () => {
-      if (this.pendingRender) return;
-      this.pendingRender = true;
-      window.setTimeout(async () => {
-        this.pendingRender = false;
-        await this.renderImmichImages(document.body);
-      }, 100);
-    };
     this.observer = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
+        if (mutation.type === 'attributes' && mutation.target instanceof HTMLImageElement) {
+          if (mutation.target.matches('img[data-immich-asset-id], img[src^="immich://asset/"]')) {
+            this.scheduleImmichRender();
+            return;
+          }
+        }
         for (const node of Array.from(mutation.addedNodes)) {
           if (!(node instanceof HTMLElement)) continue;
           if (node.matches?.('img[data-immich-asset-id], img[src^="immich://asset/"]') || node.querySelector?.('img[data-immich-asset-id], img[src^="immich://asset/"]')) {
-            schedule();
+            this.scheduleImmichRender();
             return;
           }
         }
       }
     });
-    this.observer.observe(document.body, { childList: true, subtree: true });
+    this.observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ['src', 'data-immich-asset-id'],
+      childList: true,
+      subtree: true,
+    });
+    this.registerEvent(this.app.workspace.on('file-open', () => this.scheduleImmichRender(250)));
+    this.registerEvent(this.app.workspace.on('layout-change', () => this.scheduleImmichRender(250)));
+    this.registerEvent(this.app.workspace.on('active-leaf-change', () => this.scheduleImmichRender(250)));
+    this.registerEvent(this.app.workspace.on('editor-change', () => this.scheduleImmichRender(250)));
     this.register(() => this.observer?.disconnect());
-    schedule();
+    this.scheduleImmichRender();
   }
 
   async fetchImmichThumbnailBlobUrl(assetId: string): Promise<string> {
@@ -466,6 +501,20 @@ export default class ImmichUploaderPlugin extends Plugin {
     return URL.createObjectURL(blob);
   }
 
+  getImmichThumbnailBlobUrl(assetId: string): Promise<string> {
+    const cached = this.thumbnailBlobUrlCache.get(assetId);
+    if (cached) return cached;
+    const promise = this.fetchImmichThumbnailBlobUrl(assetId).then((blobUrl) => {
+      this.blobUrls.add(blobUrl);
+      return blobUrl;
+    }).catch((error) => {
+      this.thumbnailBlobUrlCache.delete(assetId);
+      throw error;
+    });
+    this.thumbnailBlobUrlCache.set(assetId, promise);
+    return promise;
+  }
+
   async ensureVaultFolder(folder: string) {
     const parts = folder.split('/').filter(Boolean);
     let current = '';
@@ -476,6 +525,73 @@ export default class ImmichUploaderPlugin extends Plugin {
       }
     }
   }
+}
+
+class ImmichLivePreviewWidget extends WidgetType {
+  constructor(
+    private readonly plugin: ImmichUploaderPlugin,
+    private readonly assetId: string,
+    private readonly alt: string,
+  ) {
+    super();
+  }
+
+  eq(other: ImmichLivePreviewWidget) {
+    return this.assetId === other.assetId && this.alt === other.alt;
+  }
+
+  toDOM() {
+    const container = createSpan({ cls: 'immich-uploader-live-preview' });
+    const image = container.createEl('img', {
+      attr: {
+        'data-immich-asset-id': this.assetId,
+        alt: this.alt || `Immich asset ${this.assetId}`,
+      },
+    });
+    void this.plugin.loadImmichThumbnailIntoImage(image, this.assetId);
+    return container;
+  }
+
+  ignoreEvent() {
+    return false;
+  }
+}
+
+function createImmichLivePreviewExtension(plugin: ImmichUploaderPlugin) {
+  const buildDecorations = (view: EditorView): DecorationSet => {
+    const builder = new RangeSetBuilder<Decoration>();
+    for (const { from, to } of view.visibleRanges) {
+      const text = view.state.doc.sliceString(from, to);
+      for (const match of text.matchAll(IMMICH_HTML_IMG_RE)) {
+        const full = match[0];
+        const assetId = match[2];
+        if (!assetId || match.index === undefined) continue;
+        const start = from + match.index;
+        const end = start + full.length;
+        const alt = extractHtmlAttribute(full, 'alt') || `Immich asset ${assetId}`;
+        builder.add(start, end, Decoration.replace({
+          widget: new ImmichLivePreviewWidget(plugin, assetId, alt),
+        }));
+      }
+    }
+    return builder.finish();
+  };
+
+  return ViewPlugin.fromClass(class {
+    decorations: DecorationSet;
+
+    constructor(view: EditorView) {
+      this.decorations = buildDecorations(view);
+    }
+
+    update(update: ViewUpdate) {
+      if (update.docChanged || update.viewportChanged) {
+        this.decorations = buildDecorations(update.view);
+      }
+    }
+  }, {
+    decorations: (value) => value.decorations,
+  });
 }
 
 class ImmichUploaderSettingTab extends PluginSettingTab {
@@ -707,6 +823,22 @@ function escapeHtmlAttr(value: string): string {
     .replace(/"/g, '&quot;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+}
+
+function extractHtmlAttribute(html: string, name: string): string | null {
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = html.match(new RegExp(`\\b${escapedName}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i'));
+  if (!match) return null;
+  return decodeBasicHtmlEntities(match[2] || match[3] || match[4] || '');
+}
+
+function decodeBasicHtmlEntities(value: string): string {
+  return value
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
 }
 
 function escapeAlt(alt: string): string {

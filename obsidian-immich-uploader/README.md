@@ -68,5 +68,12 @@ The rendered element uses an in-memory `blob:app://obsidian...` URL. The API key
 
 ## Display modes
 
-- Reading/Preview mode: rendered through the Markdown postprocessor and DOM observer.
-- Source mode, and the active editing line in Live Preview: shows raw Markdown/HTML by Obsidian design, so images are not expected to render there.
+- Reading mode: rendered through the Markdown postprocessor.
+- Live Preview mode: rendered through a CodeMirror editor extension plus DOM observer fallback. The active editing line can still show raw HTML by Obsidian design, but inactive lines render Immich thumbnails.
+- Source mode: shows raw Markdown/HTML by Obsidian design, so images are not expected to render there.
+
+## Verification notes
+
+- `npm run build` passes.
+- `npm run install:vault` installs `manifest.json`, `main.js`, and `styles.css` into the local vault plugin directory.
+- Live Preview was verified in Obsidian on `3. Resource/자료구조/그래프.md`: 3 Immich images rendered as `blob:app://obsidian...` with `complete=true` and non-zero dimensions.
