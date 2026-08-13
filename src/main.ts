@@ -16,10 +16,7 @@ interface ImmichUploaderSettings {
   immichUrl: string;
   apiKey: string;
   deviceId: string;
-  keepLocalAttachmentLink: boolean;
   appendAssetComment: boolean;
-  replaceImgurLinksWith: 'immich' | 'local';
-  localMigrationFolder: string;
 }
 
 interface ImmichUploadResponse {
@@ -40,15 +37,13 @@ const DEFAULT_SETTINGS: ImmichUploaderSettings = {
   immichUrl: '',
   apiKey: '',
   deviceId: 'obsidian',
-  keepLocalAttachmentLink: true,
   appendAssetComment: true,
-  replaceImgurLinksWith: 'local',
-  localMigrationFolder: 'Attachments/Immich Migrated',
 };
 
 const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|heic|heif|avif|bmp|tiff?)$/i;
 const IMGUR_MARKDOWN_RE = /!\[([^\]]*)\]\((https?:\/\/(?:i\.)?imgur\.com\/[^\s)]+)\)/g;
 const IMGUR_URL_RE = /^https?:\/\/(?:i\.)?imgur\.com\//i;
+const IMMICH_ASSET_RE = /^immich:\/\/asset\/([0-9a-f-]{36})$/i;
 
 export default class ImmichUploaderPlugin extends Plugin {
   settings: ImmichUploaderSettings;
@@ -56,6 +51,9 @@ export default class ImmichUploaderPlugin extends Plugin {
   async onload() {
     await this.loadSettings();
     this.addSettingTab(new ImmichUploaderSettingTab(this.app, this));
+    this.registerMarkdownPostProcessor((element) => this.renderImmichImages(element));
+    this.registerDomEvent(document, 'paste', (event: ClipboardEvent) => this.handlePaste(event), true);
+    this.registerDomEvent(document, 'drop', (event: DragEvent) => this.handleDrop(event), true);
 
     this.addCommand({
       id: 'upload-clipboard-image-to-immich',
@@ -65,7 +63,7 @@ export default class ImmichUploaderPlugin extends Plugin {
 
     this.addCommand({
       id: 'upload-current-note-local-images-to-immich',
-      name: 'Upload current note local images to Immich',
+      name: 'Upload and replace current note local images with Immich links',
       callback: async () => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
         if (!view) {
@@ -129,13 +127,9 @@ export default class ImmichUploaderPlugin extends Plugin {
         const imageType = item.types.find((type) => type.startsWith('image/'));
         if (!imageType) continue;
         const blob = await item.getType(imageType);
-        const ext = mimeToExt(imageType);
-        const fileName = `obsidian-clipboard-${new Date().toISOString().replace(/[:.]/g, '-')}.${ext}`;
-        const file = new File([blob], fileName, { type: imageType, lastModified: Date.now() });
-        const result = await this.uploadFileToImmich(file, fileName, undefined, undefined, await sha256Hex(await file.arrayBuffer()));
-        const embed = this.renderUploadedEmbed(fileName, result, null);
+        const embed = await this.uploadBlobToImmichEmbed(blob, `obsidian-clipboard-${new Date().toISOString().replace(/[:.]/g, '-')}.${mimeToExt(imageType)}`, 'clipboard image');
         editor.replaceSelection(embed);
-        new Notice(`Uploaded clipboard image to Immich${result.id ? `: ${result.id}` : ''}`);
+        new Notice('Uploaded clipboard image to Immich.');
         return;
       }
       new Notice('No image found in clipboard.');
@@ -145,6 +139,56 @@ export default class ImmichUploaderPlugin extends Plugin {
     }
   }
 
+  async handlePaste(event: ClipboardEvent) {
+    const active = this.app.workspace.getActiveViewOfType(MarkdownView);
+    const editor = active?.editor;
+    if (!editor || !event.clipboardData?.files?.length) return;
+    const files = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith('image/'));
+    if (!files.length) return;
+    event.preventDefault();
+    try {
+      this.assertConfigured();
+      const embeds: string[] = [];
+      for (const file of files) {
+        embeds.push(await this.uploadBlobToImmichEmbed(file, file.name || `pasted-image.${mimeToExt(file.type)}`, 'pasted image'));
+      }
+      editor.replaceSelection(embeds.join('\n'));
+      new Notice(`Uploaded ${embeds.length} pasted image(s) to Immich.`);
+    } catch (error) {
+      console.error(error);
+      new Notice(`Immich paste upload failed: ${messageOf(error)}`);
+    }
+  }
+
+  async handleDrop(event: DragEvent) {
+    const active = this.app.workspace.getActiveViewOfType(MarkdownView);
+    const editor = active?.editor;
+    if (!editor || !event.dataTransfer?.files?.length) return;
+    const files = Array.from(event.dataTransfer.files).filter((file) => file.type.startsWith('image/') || IMAGE_EXT_RE.test(file.name));
+    if (!files.length) return;
+    event.preventDefault();
+    try {
+      this.assertConfigured();
+      const embeds: string[] = [];
+      for (const file of files) {
+        embeds.push(await this.uploadBlobToImmichEmbed(file, file.name || `dropped-image.${mimeToExt(file.type)}`, 'dropped image'));
+      }
+      editor.replaceSelection(embeds.join('\n'));
+      new Notice(`Uploaded ${embeds.length} dropped image(s) to Immich.`);
+    } catch (error) {
+      console.error(error);
+      new Notice(`Immich drop upload failed: ${messageOf(error)}`);
+    }
+  }
+
+  async uploadBlobToImmichEmbed(blob: Blob, fileName: string, originalPath: string): Promise<string> {
+    const type = blob.type || guessMime(fileName);
+    const file = new File([blob], fileName, { type, lastModified: Date.now() });
+    const bytes = await file.arrayBuffer();
+    const result = await this.uploadFileToImmich(file, originalPath, undefined, undefined, await sha256Hex(bytes));
+    return this.renderUploadedEmbed(fileName, result);
+  }
+
   async uploadCurrentNoteLocalImages(view: MarkdownView) {
     try {
       this.assertConfigured();
@@ -152,15 +196,18 @@ export default class ImmichUploaderPlugin extends Plugin {
       if (!file) throw new Error('No active note.');
       const text = await this.app.vault.read(file);
       const localEmbeds = [...text.matchAll(/!\[\[([^\]]+\.(?:png|jpe?g|gif|webp|heic|heif|avif|bmp|tiff?)(?:\|[^\]]*)?)\]\]/gi)];
+      let next = text;
       let uploaded = 0;
       for (const match of localEmbeds) {
         const rawTarget = match[1].split('|')[0];
         const linked = this.app.metadataCache.getFirstLinkpathDest(rawTarget, file.path);
         if (!(linked instanceof TFile)) continue;
-        await this.uploadVaultFileToImmich(linked);
+        const result = await this.uploadVaultFileToImmich(linked);
+        next = next.replace(match[0], this.renderImmichEmbed(linked.basename, result, null));
         uploaded++;
       }
-      new Notice(`Uploaded ${uploaded} local image(s) to Immich.`);
+      if (next !== text) await this.app.vault.modify(file, next);
+      new Notice(`Uploaded and replaced ${uploaded} local image embed(s) with Immich links. Original local files were not deleted.`);
     } catch (error) {
       console.error(error);
       new Notice(`Local image upload failed: ${messageOf(error)}`);
@@ -184,9 +231,7 @@ export default class ImmichUploaderPlugin extends Plugin {
       let migrated = 0;
       for (const candidate of candidates) {
         const upload = await this.downloadImgurAndUpload(candidate);
-        const replacement = this.settings.replaceImgurLinksWith === 'immich'
-          ? `![${escapeAlt(candidate.alt)}](${this.assetViewUrl(upload.result.id)})${this.renderAssetComment(upload.result, candidate.url)}`
-          : `![[${upload.localPath}]]${this.renderAssetComment(upload.result, candidate.url)}`;
+        const replacement = this.renderImmichEmbed(candidate.alt, upload.result, candidate.url);
         next = next.replace(candidate.markdown, replacement);
         migrated++;
       }
@@ -218,9 +263,7 @@ export default class ImmichUploaderPlugin extends Plugin {
         let next = await this.app.vault.read(entry.file);
         for (const candidate of entry.candidates) {
           const upload = await this.downloadImgurAndUpload(candidate);
-          const replacement = this.settings.replaceImgurLinksWith === 'immich'
-            ? `![${escapeAlt(candidate.alt)}](${this.assetViewUrl(upload.result.id)})${this.renderAssetComment(upload.result, candidate.url)}`
-            : `![[${upload.localPath}]]${this.renderAssetComment(upload.result, candidate.url)}`;
+          const replacement = this.renderImmichEmbed(candidate.alt, upload.result, candidate.url);
           next = next.replace(candidate.markdown, replacement);
           imageCount++;
         }
@@ -234,20 +277,16 @@ export default class ImmichUploaderPlugin extends Plugin {
     }
   }
 
-  async downloadImgurAndUpload(candidate: ImgurCandidate): Promise<{ result: ImmichUploadResponse; localPath: string }> {
+  async downloadImgurAndUpload(candidate: ImgurCandidate): Promise<{ result: ImmichUploadResponse }> {
     const resp = await requestUrl({ url: candidate.url, method: 'GET', throw: false });
     if (resp.status >= 400) throw new Error(`Failed to download ${candidate.url}: HTTP ${resp.status}`);
     const contentType = header(resp.headers, 'content-type') || guessMime(candidate.url);
     const ext = extFromUrl(candidate.url) || mimeToExt(contentType);
     const fileName = safeFileName(`imgur-${basenameWithoutQuery(candidate.url) || crypto.randomUUID()}.${ext}`);
-    const folder = normalizeVaultFolder(this.settings.localMigrationFolder);
-    if (folder) await this.ensureVaultFolder(folder);
-    const localPath = folder ? `${folder}/${fileName}` : fileName;
     const arrayBuffer = resp.arrayBuffer;
-    await this.app.vault.adapter.writeBinary(localPath, arrayBuffer);
     const file = new File([arrayBuffer], fileName, { type: contentType, lastModified: Date.now() });
     const result = await this.uploadFileToImmich(file, fileName, undefined, undefined, await sha256Hex(arrayBuffer));
-    return { result, localPath };
+    return { result };
   }
 
   async uploadVaultFileToImmich(file: TFile): Promise<ImmichUploadResponse> {
@@ -291,12 +330,13 @@ export default class ImmichUploaderPlugin extends Plugin {
     return resp.json as ImmichUploadResponse;
   }
 
-  renderUploadedEmbed(fileName: string, result: ImmichUploadResponse, localPath: string | null): string {
-    const comment = this.renderAssetComment(result, null);
-    if (this.settings.keepLocalAttachmentLink && localPath) return `![[${localPath}]]${comment}`;
-    if (result.id && !this.settings.keepLocalAttachmentLink) return `![${escapeAlt(fileName)}](${this.assetViewUrl(result.id)})${comment}`;
-    if (result.id) return `![${escapeAlt(fileName)}](${this.assetViewUrl(result.id)})${comment}`;
-    return comment || '';
+  renderUploadedEmbed(fileName: string, result: ImmichUploadResponse): string {
+    return this.renderImmichEmbed(fileName, result, null);
+  }
+
+  renderImmichEmbed(alt: string, result: ImmichUploadResponse, sourceUrl: string | null): string {
+    if (!result.id) throw new Error('Immich upload response did not include an asset id.');
+    return `![${escapeAlt(alt)}](immich://asset/${result.id})${this.renderAssetComment(result, sourceUrl)}`;
   }
 
   renderAssetComment(result: ImmichUploadResponse, sourceUrl: string | null): string {
@@ -305,9 +345,37 @@ export default class ImmichUploaderPlugin extends Plugin {
     return ` <!-- immich-asset-id=${result.id}${source} -->`;
   }
 
-  assetViewUrl(assetId?: string): string {
-    if (!assetId) return this.settings.immichUrl.trim();
-    return `${this.settings.immichUrl.trim().replace(/\/+$/, '')}/photos/${assetId}`;
+  async renderImmichImages(element: HTMLElement) {
+    const images = Array.from(element.querySelectorAll('img'));
+    for (const image of images) {
+      const src = image.getAttribute('src') || '';
+      const match = src.match(IMMICH_ASSET_RE);
+      if (!match) continue;
+      const assetId = match[1];
+      image.setAttribute('data-immich-asset-id', assetId);
+      image.setAttribute('alt', image.getAttribute('alt') || `Immich asset ${assetId}`);
+      try {
+        const blobUrl = await this.fetchImmichThumbnailBlobUrl(assetId);
+        image.setAttribute('src', blobUrl);
+      } catch (error) {
+        console.error(error);
+        image.replaceWith(createEl('span', { text: `Immich image failed to load: ${assetId}` }));
+      }
+    }
+  }
+
+  async fetchImmichThumbnailBlobUrl(assetId: string): Promise<string> {
+    this.assertConfigured();
+    const resp = await requestUrl({
+      url: `${this.normalizedImmichApiBase()}/assets/${assetId}/thumbnail?size=preview`,
+      method: 'GET',
+      headers: { 'x-api-key': this.settings.apiKey.trim() },
+      throw: false,
+    });
+    if (resp.status >= 400) throw new Error(`Immich thumbnail HTTP ${resp.status}: ${resp.text?.slice(0, 200)}`);
+    const contentType = header(resp.headers, 'content-type') || 'image/jpeg';
+    const blob = new Blob([resp.arrayBuffer], { type: contentType });
+    return URL.createObjectURL(blob);
   }
 
   async ensureVaultFolder(folder: string) {
@@ -369,15 +437,6 @@ class ImmichUploaderSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
 
-    new Setting(containerEl)
-      .setName('Keep local attachment links')
-      .setDesc('Recommended. Upload to Immich but keep Obsidian embeds local so notes still render without Immich auth cookies.')
-      .addToggle((toggle) => toggle
-        .setValue(this.plugin.settings.keepLocalAttachmentLink)
-        .onChange(async (value) => {
-          this.plugin.settings.keepLocalAttachmentLink = value;
-          await this.plugin.saveSettings();
-        }));
 
     new Setting(containerEl)
       .setName('Append Immich asset comment')
@@ -389,27 +448,7 @@ class ImmichUploaderSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
 
-    new Setting(containerEl)
-      .setName('Imgur migration replacement')
-      .setDesc('Local keeps images visible in Obsidian. Immich inserts /photos/<assetId> links, which may require login to render.')
-      .addDropdown((dropdown) => dropdown
-        .addOption('local', 'Local attachment embed + Immich asset comment')
-        .addOption('immich', 'Immich photo URL')
-        .setValue(this.plugin.settings.replaceImgurLinksWith)
-        .onChange(async (value: 'immich' | 'local') => {
-          this.plugin.settings.replaceImgurLinksWith = value;
-          await this.plugin.saveSettings();
-        }));
 
-    new Setting(containerEl)
-      .setName('Imgur migration local folder')
-      .setDesc('Used when migrating Imgur links and keeping local embeds.')
-      .addText((text) => text
-        .setValue(this.plugin.settings.localMigrationFolder)
-        .onChange(async (value) => {
-          this.plugin.settings.localMigrationFolder = normalizeVaultFolder(value);
-          await this.plugin.saveSettings();
-        }));
   }
 }
 
