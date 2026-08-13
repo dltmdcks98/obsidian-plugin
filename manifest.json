@@ -1,0 +1,10 @@
+{
+  "id": "obsidian-immich-uploader",
+  "name": "Immich Uploader",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Upload pasted or selected Obsidian images to Immich using a user-configured Immich URL and API key.",
+  "author": "LSC / Hermes",
+  "authorUrl": "",
+  "isDesktopOnly": false
+}
