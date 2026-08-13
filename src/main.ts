@@ -336,7 +336,8 @@ export default class ImmichUploaderPlugin extends Plugin {
 
   renderImmichEmbed(alt: string, result: ImmichUploadResponse, sourceUrl: string | null): string {
     if (!result.id) throw new Error('Immich upload response did not include an asset id.');
-    return `![${escapeAlt(alt)}](immich://asset/${result.id})${this.renderAssetComment(result, sourceUrl)}`;
+    const escapedAlt = escapeHtmlAttr(alt);
+    return `<img data-immich-asset-id="${result.id}" alt="${escapedAlt}">${this.renderAssetComment(result, sourceUrl)}`;
   }
 
   renderAssetComment(result: ImmichUploadResponse, sourceUrl: string | null): string {
@@ -348,12 +349,14 @@ export default class ImmichUploaderPlugin extends Plugin {
   async renderImmichImages(element: HTMLElement) {
     const images = Array.from(element.querySelectorAll('img'));
     for (const image of images) {
+      const explicitAssetId = image.getAttribute('data-immich-asset-id');
       const src = image.getAttribute('src') || '';
       const match = src.match(IMMICH_ASSET_RE);
-      if (!match) continue;
-      const assetId = match[1];
+      const assetId = explicitAssetId || match?.[1];
+      if (!assetId) continue;
       image.setAttribute('data-immich-asset-id', assetId);
       image.setAttribute('alt', image.getAttribute('alt') || `Immich asset ${assetId}`);
+      image.addClass('immich-uploader-image');
       try {
         const blobUrl = await this.fetchImmichThumbnailBlobUrl(assetId);
         image.setAttribute('src', blobUrl);
@@ -580,6 +583,14 @@ async function sha256Hex(data: ArrayBuffer): Promise<string> {
 function stableDeviceAssetId(path: string, size: number, modifiedAt: Date, sha256?: string): string {
   if (sha256) return `sha256:${sha256}`;
   return `${path}:${size}:${modifiedAt.getTime()}`;
+}
+
+function escapeHtmlAttr(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 function escapeAlt(alt: string): string {
