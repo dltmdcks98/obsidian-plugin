@@ -44,14 +44,20 @@ const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|heic|heif|avif|bmp|tiff?)$/i;
 const IMGUR_MARKDOWN_RE = /!\[([^\]]*)\]\((https?:\/\/(?:i\.)?imgur\.com\/[^\s)]+)\)/g;
 const IMGUR_URL_RE = /^https?:\/\/(?:i\.)?imgur\.com\//i;
 const IMMICH_ASSET_RE = /^immich:\/\/asset\/([0-9a-f-]{36})$/i;
+const IMMICH_HTML_IMG_RE = /<img\b([^>]*?)\bdata-immich-asset-id=["']([0-9a-f-]{36})["']([^>]*)>/gi;
 
 export default class ImmichUploaderPlugin extends Plugin {
   settings: ImmichUploaderSettings;
+  private observer: MutationObserver | null = null;
+  private pendingRender = false;
+  private blobUrls = new Set<string>();
 
   async onload() {
     await this.loadSettings();
     this.addSettingTab(new ImmichUploaderSettingTab(this.app, this));
     this.registerMarkdownPostProcessor((element) => this.renderImmichImages(element));
+    this.startImmichImageObserver();
+    this.register(() => this.revokeImmichBlobUrls());
     this.registerDomEvent(document, 'paste', (event: ClipboardEvent) => this.handlePaste(event), true);
     this.registerDomEvent(document, 'drop', (event: DragEvent) => this.handleDrop(event), true);
 
@@ -84,6 +90,18 @@ export default class ImmichUploaderPlugin extends Plugin {
       id: 'migrate-current-note-imgur-links',
       name: 'Migrate current note Imgur links to Immich',
       editorCallback: async (editor) => this.migrateCurrentNoteImgurLinks(editor, false),
+    });
+
+    this.addCommand({
+      id: 'rewrite-current-note-immich-html-embeds',
+      name: 'Rewrite current note Immich HTML image embeds',
+      editorCallback: (editor) => this.rewriteCurrentNoteImmichHtml(editor),
+    });
+
+    this.addCommand({
+      id: 'rewrite-vault-immich-html-embeds',
+      name: 'Rewrite all vault Immich HTML image embeds',
+      callback: async () => this.rewriteVaultImmichHtml(),
     });
 
     this.addCommand({
@@ -243,6 +261,27 @@ export default class ImmichUploaderPlugin extends Plugin {
     }
   }
 
+  rewriteCurrentNoteImmichHtml(editor: Editor) {
+    const content = editor.getValue();
+    const next = rewriteImmichHtmlImageSrc(content);
+    if (next === content) {
+      new Notice('No Immich HTML image embeds needed rewriting in current note.');
+      return;
+    }
+    editor.setValue(next);
+    new Notice('Rewrote current note Immich image embeds.');
+  }
+
+  async rewriteVaultImmichHtml() {
+    try {
+      const result = await rewriteVaultImmichHtmlImageSrc(this.app);
+      new Notice(`Rewrote ${result.embeds} Immich image embed(s) in ${result.files} note(s).`);
+    } catch (error) {
+      console.error(error);
+      new Notice(`Immich embed rewrite failed: ${messageOf(error)}`);
+    }
+  }
+
   async migrateVaultImgurLinks(dryRun: boolean) {
     try {
       this.assertConfigured();
@@ -337,7 +376,8 @@ export default class ImmichUploaderPlugin extends Plugin {
   renderImmichEmbed(alt: string, result: ImmichUploadResponse, sourceUrl: string | null): string {
     if (!result.id) throw new Error('Immich upload response did not include an asset id.');
     const escapedAlt = escapeHtmlAttr(alt);
-    return `<img data-immich-asset-id="${result.id}" alt="${escapedAlt}">${this.renderAssetComment(result, sourceUrl)}`;
+    const assetSrc = `immich://asset/${result.id}`;
+    return `<img src="${assetSrc}" data-immich-asset-id="${result.id}" alt="${escapedAlt}">${this.renderAssetComment(result, sourceUrl)}`;
   }
 
   renderAssetComment(result: ImmichUploadResponse, sourceUrl: string | null): string {
@@ -347,8 +387,13 @@ export default class ImmichUploaderPlugin extends Plugin {
   }
 
   async renderImmichImages(element: HTMLElement) {
-    const images = Array.from(element.querySelectorAll('img'));
+    const selector = 'img[data-immich-asset-id], img[src^="immich://asset/"]';
+    const images = [
+      ...(element.matches(selector) ? [element as HTMLImageElement] : []),
+      ...Array.from(element.querySelectorAll<HTMLImageElement>(selector)),
+    ];
     for (const image of images) {
+      if (image.hasClass('immich-uploader-image')) continue;
       const explicitAssetId = image.getAttribute('data-immich-asset-id');
       const src = image.getAttribute('src') || '';
       const match = src.match(IMMICH_ASSET_RE);
@@ -359,12 +404,52 @@ export default class ImmichUploaderPlugin extends Plugin {
       image.addClass('immich-uploader-image');
       try {
         const blobUrl = await this.fetchImmichThumbnailBlobUrl(assetId);
+        if (!image.isConnected) {
+          URL.revokeObjectURL(blobUrl);
+          continue;
+        }
+        this.blobUrls.add(blobUrl);
         image.setAttribute('src', blobUrl);
       } catch (error) {
         console.error(error);
-        image.replaceWith(createEl('span', { text: `Immich image failed to load: ${assetId}` }));
+        if (image.isConnected) {
+          image.replaceWith(createEl('span', { text: `Immich image failed to load: ${assetId}` }));
+        }
       }
     }
+  }
+
+  revokeImmichBlobUrls() {
+    for (const blobUrl of this.blobUrls) {
+      URL.revokeObjectURL(blobUrl);
+    }
+    this.blobUrls.clear();
+  }
+
+  startImmichImageObserver() {
+    this.observer?.disconnect();
+    const schedule = () => {
+      if (this.pendingRender) return;
+      this.pendingRender = true;
+      window.setTimeout(async () => {
+        this.pendingRender = false;
+        await this.renderImmichImages(document.body);
+      }, 100);
+    };
+    this.observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of Array.from(mutation.addedNodes)) {
+          if (!(node instanceof HTMLElement)) continue;
+          if (node.matches?.('img[data-immich-asset-id], img[src^="immich://asset/"]') || node.querySelector?.('img[data-immich-asset-id], img[src^="immich://asset/"]')) {
+            schedule();
+            return;
+          }
+        }
+      }
+    });
+    this.observer.observe(document.body, { childList: true, subtree: true });
+    this.register(() => this.observer?.disconnect());
+    schedule();
   }
 
   async fetchImmichThumbnailBlobUrl(assetId: string): Promise<string> {
@@ -569,6 +654,37 @@ function basenameWithoutQuery(url: string): string {
 
 function safeFileName(name: string): string {
   return name.replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim();
+}
+
+function rewriteImmichHtmlImageSrc(markdown: string): string {
+  return markdown.replace(IMMICH_HTML_IMG_RE, (full, before: string, assetId: string, after: string) => {
+    const attrs = `${before || ''}${after || ''}`;
+    if (/\bsrc\s*=\s*["']immich:\/\/asset\//i.test(full)) return full;
+    const cleanedAttrs = attrs.replace(/\s*\bsrc\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/i, '');
+    return `<img src="immich://asset/${assetId}" data-immich-asset-id="${assetId}"${cleanedAttrs}>`;
+  });
+}
+
+async function rewriteVaultImmichHtmlImageSrc(app: App): Promise<{ files: number; embeds: number }> {
+  let files = 0;
+  let embeds = 0;
+  for (const file of app.vault.getMarkdownFiles()) {
+    const content = await app.vault.read(file);
+    let replaced = 0;
+    const next = content.replace(IMMICH_HTML_IMG_RE, (full, before: string, assetId: string, after: string) => {
+      if (/\bsrc\s*=\s*["']immich:\/\/asset\//i.test(full)) return full;
+      replaced += 1;
+      const attrs = `${before || ''}${after || ''}`;
+      const cleanedAttrs = attrs.replace(/\s*\bsrc\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/i, '');
+      return `<img src="immich://asset/${assetId}" data-immich-asset-id="${assetId}"${cleanedAttrs}>`;
+    });
+    if (next !== content) {
+      await app.vault.modify(file, next);
+      files += 1;
+      embeds += replaced;
+    }
+  }
+  return { files, embeds };
 }
 
 function normalizeVaultFolder(value: string): string {

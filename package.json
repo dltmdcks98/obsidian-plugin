@@ -4,8 +4,8 @@
   "description": "Obsidian plugin for uploading images to Immich with user-configured URL/API key.",
   "main": "main.js",
   "scripts": {
-    "build": "tsc -noEmit -skipLibCheck && esbuild src/main.ts --bundle --external:obsidian --format=cjs --target=es2018 --outfile=main.js",
-    "dev": "esbuild src/main.ts --bundle --external:obsidian --format=cjs --target=es2018 --outfile=main.js --watch",
+    "build": "tsc -noEmit -skipLibCheck && esbuild src/main.ts --bundle --external:obsidian --external:@codemirror/state --external:@codemirror/view --format=cjs --target=es2018 --outfile=main.js",
+    "dev": "esbuild src/main.ts --bundle --external:obsidian --external:@codemirror/state --external:@codemirror/view --format=cjs --target=es2018 --outfile=main.js --watch",
     "install:vault": "bash scripts/install-vault.sh"
   },
   "keywords": [
