@@ -54,7 +54,7 @@ Target vault plugin directory:
 Stored Markdown:
 
 ```md
-<img src="immich://asset/<asset-id>" data-immich-asset-id="<asset-id>" alt="image" /> <!-- immich-asset-id=<asset-id> source=https://i.imgur.com/abc123.jpg -->
+<img src="immich://asset/<asset-id>" data-immich-asset-id="<asset-id>" alt="image" />
 ```
 
 The plugin detects the `data-immich-asset-id` or `src="immich://asset/<asset-id>"` value, then renders it by requesting:

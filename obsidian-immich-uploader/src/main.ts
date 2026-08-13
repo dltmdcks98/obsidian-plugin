@@ -18,7 +18,6 @@ interface ImmichUploaderSettings {
   immichUrl: string;
   apiKey: string;
   deviceId: string;
-  appendAssetComment: boolean;
 }
 
 interface ImmichUploadResponse {
@@ -39,7 +38,6 @@ const DEFAULT_SETTINGS: ImmichUploaderSettings = {
   immichUrl: '',
   apiKey: '',
   deviceId: 'obsidian',
-  appendAssetComment: true,
 };
 
 const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|heic|heif|avif|bmp|tiff?)$/i;
@@ -381,13 +379,7 @@ export default class ImmichUploaderPlugin extends Plugin {
     if (!result.id) throw new Error('Immich upload response did not include an asset id.');
     const escapedAlt = escapeHtmlAttr(alt);
     const assetSrc = `immich://asset/${result.id}`;
-    return `<img src="${assetSrc}" data-immich-asset-id="${result.id}" alt="${escapedAlt}">${this.renderAssetComment(result, sourceUrl)}`;
-  }
-
-  renderAssetComment(result: ImmichUploadResponse, sourceUrl: string | null): string {
-    if (!this.settings.appendAssetComment || !result.id) return '';
-    const source = sourceUrl ? ` source=${sourceUrl}` : '';
-    return ` <!-- immich-asset-id=${result.id}${source} -->`;
+    return `<img src="${assetSrc}" data-immich-asset-id="${result.id}" alt="${escapedAlt}">`;
   }
 
   async renderImmichImages(element: HTMLElement) {
@@ -640,18 +632,6 @@ class ImmichUploaderSettingTab extends PluginSettingTab {
           this.plugin.settings.deviceId = value.trim() || 'obsidian';
           await this.plugin.saveSettings();
         }));
-
-
-    new Setting(containerEl)
-      .setName('Append Immich asset comment')
-      .setDesc('Adds an HTML comment with the Immich asset ID after migrated/uploaded embeds.')
-      .addToggle((toggle) => toggle
-        .setValue(this.plugin.settings.appendAssetComment)
-        .onChange(async (value) => {
-          this.plugin.settings.appendAssetComment = value;
-          await this.plugin.saveSettings();
-        }));
-
 
   }
 }
