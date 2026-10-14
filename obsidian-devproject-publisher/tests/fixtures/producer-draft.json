@@ -1,0 +1,31 @@
+{
+  "sourceId": "a28dc815-e647-4e35-9e46-6bc6b8dd9d2b",
+  "expectedRevision": 0,
+  "title": "새 게시글",
+  "slug": "fixture",
+  "summary": "",
+  "tags": [],
+  "html": "<h1 data-export-id=\"export-1\" id=\"export-1\">Public Example</h1>\n",
+  "styles": {
+    "profileId": "obsidian-static-v1",
+    "elements": [
+      {
+        "id": "export-1",
+        "declarations": {
+          "background-color": "rgba(0, 0, 0, 0)",
+          "font-size": "2em",
+          "font-weight": "bold",
+          "display": "block"
+        }
+      }
+    ]
+  },
+  "assets": [],
+  "renderer": {
+    "schemaVersion": 1,
+    "profile": "obsidian-static-v1",
+    "obsidianVersion": "1.13.1",
+    "pluginVersion": "0.1.0"
+  },
+  "warnings": []
+}

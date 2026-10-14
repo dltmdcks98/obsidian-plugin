@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "safe": true,
+  "draft": {
+    "request": {
+      "sourceId": "11111111-1111-4111-8111-111111111111",
+      "expectedRevision": 0,
+      "slug": "native-blog-contract",
+      "title": "Native blog contract",
+      "summary": "Safe synthetic fixture",
+      "tags": ["contract"],
+      "markdown": "# Synthetic fixture",
+      "html": "<h1 data-export-id=\"heading-1\">Synthetic fixture</h1>",
+      "styles": {"profileId": "obsidian-static-v1", "elements": [{"id": "heading-1", "declarations": {"color": "#123456"}}]},
+      "assets": [],
+      "renderer": {"schemaVersion": 1, "profile": "obsidian-static-v1", "obsidianVersion": "synthetic", "pluginVersion": "0.1.0"},
+      "warnings": []
+    },
+    "response": {"postId": "22222222-2222-4222-8222-222222222222", "sourceId": "11111111-1111-4111-8111-111111111111", "draftRevision": 1, "publishedRevision": null, "status": "DRAFT", "slug": "native-blog-contract", "previewPath": "/api/admin/blog/posts/22222222-2222-4222-8222-222222222222/revisions/1/preview", "warnings": []}
+  },
+  "publish": {
+    "request": {"expectedDraftRevision": 1, "expectedPublishedRevision": 0, "confirmation": "PUBLISH"},
+    "response": {"postId": "22222222-2222-4222-8222-222222222222", "sourceId": "11111111-1111-4111-8111-111111111111", "draftRevision": 1, "publishedRevision": 1, "status": "PUBLISHED", "slug": "native-blog-contract"}
+  },
+  "grant": {
+    "request": {"scopes": ["draft:write", "asset:write", "preview:read", "publish:write"], "sourceAllowlist": ["11111111-1111-4111-8111-111111111111"], "expiresAt": "2026-11-01T00:00:00Z"},
+    "response": {"grantId": "33333333-3333-4333-8333-333333333333", "grantToken": "REDACTED_RETURNED_ONCE", "scopes": ["draft:write", "asset:write", "preview:read", "publish:write"]}
+  },
+  "upload": {
+    "response": {"assetId": "44444444-4444-4444-8444-444444444444", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "mediaType": "image/png", "size": 68}
+  }
+}

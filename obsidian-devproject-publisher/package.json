@@ -1,0 +1,23 @@
+{
+  "name": "obsidian-devproject-publisher",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc --noEmit && node esbuild.config.mjs",
+    "test": "npm run build && node --test --test-concurrency=1 tests/regression.test.cjs tests/recovery.test.cjs tests/session-race.test.cjs tests/browser.test.cjs",
+    "install:plugin": "node scripts/install.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.52.0",
+    "@types/markdown-it": "14.1.2",
+    "@types/node": "22.15.30",
+    "esbuild": "0.25.5",
+    "jsdom": "26.1.0",
+    "obsidian": "1.13.1",
+    "typescript": "5.8.3"
+  },
+  "dependencies": {
+    "markdown-it": "14.1.0"
+  }
+}

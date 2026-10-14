@@ -1,0 +1,256 @@
+{
+  "html": "<h1 data-export-id=\"export-1\" id=\"export-1\">Example</h1>\n<blockquote class=\"callout\" data-export-id=\"export-2\"><p class=\"callout-title\" data-export-id=\"export-3\">Notice</p><p class=\"callout-content\" data-export-id=\"export-4\">Synthetic content</p>\n</blockquote>\n<ul data-export-id=\"export-5\">\n<li class=\"task-list-item\" data-export-id=\"export-6\"><input type=\"checkbox\" disabled=\"\" checked=\"\" data-export-id=\"export-7\"> Done</li>\n<li class=\"task-list-item\" data-export-id=\"export-8\"><input type=\"checkbox\" disabled=\"\" data-export-id=\"export-9\"> Pending</li>\n</ul>\n<table data-export-id=\"export-10\">\n<thead data-export-id=\"export-11\">\n<tr data-export-id=\"export-12\">\n<th data-export-id=\"export-13\">Item</th>\n<th data-export-id=\"export-14\">Value</th>\n</tr>\n</thead>\n<tbody data-export-id=\"export-15\">\n<tr data-export-id=\"export-16\">\n<td data-export-id=\"export-17\">Example</td>\n<td data-export-id=\"export-18\">1</td>\n</tr>\n</tbody>\n</table>\n<pre data-export-id=\"export-19\"><code class=\"language-js\" data-export-id=\"export-20\">const answer = 1;\n</code></pre>\n<p data-export-id=\"export-21\"><a href=\"https://example.invalid/docs\" rel=\"noopener noreferrer\" data-export-id=\"export-22\">External</a></p>\n<p data-export-id=\"export-23\">[이미지 제외]\n[비공개 링크]</p>\n<p data-export-id=\"export-24\">[이미지 제외]</p>\n<p data-export-id=\"export-25\">[지원하지 않는 콘텐츠]</p><p data-export-id=\"export-26\">[지원하지 않는 콘텐츠]</p><p data-export-id=\"export-27\">[수식 제외]</p>\n<p data-export-id=\"export-28\">[지원하지 않는 콘텐츠]</p>\n<p data-export-id=\"export-29\"><img src=\"/api/blog/assets/4b49706e-ef8b-46a4-8d86-3e281276239e\" alt=\"선택한 이미지\" data-export-id=\"export-30\"></p>\n",
+  "styles": {
+    "profileId": "obsidian-static-v1",
+    "elements": [
+      {
+        "id": "export-1",
+        "declarations": {
+          "background-color": "rgba(0, 0, 0, 0)",
+          "font-size": "2em",
+          "font-weight": "bold",
+          "display": "block"
+        }
+      },
+      {
+        "id": "export-2",
+        "declarations": {
+          "background-color": "rgba(0, 0, 0, 0)",
+          "display": "block"
+        }
+      },
+      {
+        "id": "export-3",
+        "declarations": {
+          "background-color": "rgba(0, 0, 0, 0)",
+          "display": "block"
+        }
+      },
+      {
+        "id": "export-4",
+        "declarations": {
+          "background-color": "rgba(0, 0, 0, 0)",
+          "display": "block"
+        }
+      },
+      {
+        "id": "export-5",
+        "declarations": {
+          "background-color": "rgba(0, 0, 0, 0)",
+          "display": "block"
+        }
+      },
+      {
+        "id": "export-6",
+        "declarations": {
+          "background-color": "rgba(0, 0, 0, 0)",
+          "display": "list-item"
+        }
+      },
+      {
+        "id": "export-7",
+        "declarations": {
+          "line-height": "normal",
+          "letter-spacing": "normal",
+          "text-align": "start",
+          "display": "inline-block",
+          "margin-top": "3px",
+          "margin-bottom": "3px",
+          "border-top-width": "2px",
+          "border-right-width": "2px",
+          "border-bottom-width": "2px",
+          "border-left-width": "2px"
+        }
+      },
+      {
+        "id": "export-8",
+        "declarations": {
+          "background-color": "rgba(0, 0, 0, 0)",
+          "display": "list-item"
+        }
+      },
+      {
+        "id": "export-9",
+        "declarations": {
+          "line-height": "normal",
+          "letter-spacing": "normal",
+          "text-align": "start",
+          "display": "inline-block",
+          "margin-top": "3px",
+          "margin-bottom": "3px",
+          "border-top-width": "2px",
+          "border-right-width": "2px",
+          "border-bottom-width": "2px",
+          "border-left-width": "2px"
+        }
+      },
+      {
+        "id": "export-10",
+        "declarations": {
+          "background-color": "rgba(0, 0, 0, 0)",
+          "display": "table",
+          "border-collapse": "separate",
+          "border-top-color": "rgb(128, 128, 128)",
+          "border-right-color": "rgb(128, 128, 128)",
+          "border-bottom-color": "rgb(128, 128, 128)",
+          "border-left-color": "rgb(128, 128, 128)"
+        }
+      },
+      {
+        "id": "export-11",
+        "declarations": {
+          "background-color": "rgba(0, 0, 0, 0)",
+          "display": "table-header-group"
+        }
+      },
+      {
+        "id": "export-12",
+        "declarations": {
+          "background-color": "rgba(0, 0, 0, 0)",
+          "display": "table-row"
+        }
+      },
+      {
+        "id": "export-13",
+        "declarations": {
+          "background-color": "rgba(0, 0, 0, 0)",
+          "font-weight": "bold",
+          "display": "table-cell"
+        }
+      },
+      {
+        "id": "export-14",
+        "declarations": {
+          "background-color": "rgba(0, 0, 0, 0)",
+          "font-weight": "bold",
+          "display": "table-cell"
+        }
+      },
+      {
+        "id": "export-15",
+        "declarations": {
+          "background-color": "rgba(0, 0, 0, 0)",
+          "display": "table-row-group"
+        }
+      },
+      {
+        "id": "export-16",
+        "declarations": {
+          "background-color": "rgba(0, 0, 0, 0)",
+          "display": "table-row"
+        }
+      },
+      {
+        "id": "export-17",
+        "declarations": {
+          "background-color": "rgba(0, 0, 0, 0)",
+          "display": "table-cell"
+        }
+      },
+      {
+        "id": "export-18",
+        "declarations": {
+          "background-color": "rgba(0, 0, 0, 0)",
+          "display": "table-cell"
+        }
+      },
+      {
+        "id": "export-19",
+        "declarations": {
+          "background-color": "rgba(0, 0, 0, 0)",
+          "white-space": "pre",
+          "display": "block"
+        }
+      },
+      {
+        "id": "export-20",
+        "declarations": {
+          "background-color": "rgba(0, 0, 0, 0)"
+        }
+      },
+      {
+        "id": "export-21",
+        "declarations": {
+          "background-color": "rgba(0, 0, 0, 0)",
+          "display": "block"
+        }
+      },
+      {
+        "id": "export-22",
+        "declarations": {
+          "background-color": "rgba(0, 0, 0, 0)"
+        }
+      },
+      {
+        "id": "export-23",
+        "declarations": {
+          "background-color": "rgba(0, 0, 0, 0)",
+          "display": "block"
+        }
+      },
+      {
+        "id": "export-24",
+        "declarations": {
+          "background-color": "rgba(0, 0, 0, 0)",
+          "display": "block"
+        }
+      },
+      {
+        "id": "export-25",
+        "declarations": {
+          "background-color": "rgba(0, 0, 0, 0)",
+          "display": "block"
+        }
+      },
+      {
+        "id": "export-26",
+        "declarations": {
+          "background-color": "rgba(0, 0, 0, 0)",
+          "display": "block"
+        }
+      },
+      {
+        "id": "export-27",
+        "declarations": {
+          "background-color": "rgba(0, 0, 0, 0)",
+          "display": "block"
+        }
+      },
+      {
+        "id": "export-28",
+        "declarations": {
+          "background-color": "rgba(0, 0, 0, 0)",
+          "display": "block"
+        }
+      },
+      {
+        "id": "export-29",
+        "declarations": {
+          "background-color": "rgba(0, 0, 0, 0)",
+          "display": "block"
+        }
+      },
+      {
+        "id": "export-30",
+        "declarations": {
+          "background-color": "rgba(0, 0, 0, 0)"
+        }
+      }
+    ]
+  },
+  "warnings": [
+    {
+      "code": "IMAGE_NOT_SELECTED",
+      "message": "선택하지 않은 이미지를 제외했습니다."
+    },
+    {
+      "code": "PRIVATE_CONTENT_BLOCKED",
+      "message": "비공개 참조 또는 원시 HTML을 제외했습니다."
+    },
+    {
+      "code": "UNSUPPORTED_WIDGET",
+      "message": "지원하지 않는 동적 콘텐츠를 제외했습니다."
+    }
+  ],
+  "rendererEvidence": "official-signature mock, NOT actual Obsidian application"
+}
